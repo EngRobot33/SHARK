@@ -1,6 +1,6 @@
-import string
-
 from strings_with_arrows import *
+
+import string
 
 
 DIGITS = '0123456789'
@@ -19,10 +19,19 @@ TT_POW = 'POW'
 TT_EQ = 'EQ'
 TT_LPAREN = 'LPAREN'
 TT_RPAREN = 'RPAREN'
+TT_EE = 'EE'
+TT_NE = 'NE'
+TT_LT = 'LT'
+TT_GT = 'GT'
+TT_LTE = 'LTE'
+TT_GTE = 'GTE'
 TT_EOF = 'EOF'
 
 KEYWORDS = [
-    'VAR'
+    'VAR',
+    'AND',
+    'OR',
+    'NOT'
 ]
 
 
@@ -34,9 +43,9 @@ class Error:
         self.details = details
 
     def __str__(self):
-        result = f'{self.error_name}: {self.details}' + '\n'
+        result = f'{self.error_name}: {self.details}\n'
         result += f'File {self.pos_start.fn}, line {self.pos_start.ln + 1}'
-        result += '\n\n' + string_with_arrows(self.pos_start.ftxt, self.pos_start, self.pos_end) + '\n'
+        result += '\n\n' + string_with_arrows(self.pos_start.ftxt, self.pos_start, self.pos_end)
         return result
 
 
@@ -45,8 +54,13 @@ class IllegalCharError(Error):
         super().__init__(pos_start, pos_end, 'Illegal Character', details)
 
 
-class InvalidSyntaxError(Error):
+class ExpectedCharError(Error):
     def __init__(self, pos_start, pos_end, details):
+        super().__init__(pos_start, pos_end, 'Expected Character', details)
+
+
+class InvalidSyntaxError(Error):
+    def __init__(self, pos_start, pos_end, details=''):
         super().__init__(pos_start, pos_end, 'Invalid Syntax', details)
 
 
@@ -57,8 +71,8 @@ class RunTimeError(Error):
 
     def __str__(self):
         result = self.generate_traceback()
-        result += f'{self.error_name}: {self.details}' + '\n'
-        result += '\n\n' + string_with_arrows(self.pos_start.ftxt, self.pos_start, self.pos_end) + '\n'
+        result += f'{self.error_name}: {self.details}'
+        result += '\n\n' + string_with_arrows(self.pos_start.ftxt, self.pos_start, self.pos_end)
         return result
 
     def generate_traceback(self):
@@ -107,7 +121,7 @@ class Token:
             self.pos_end.advance()
 
         if pos_end:
-            self.pos_end = pos_end
+            self.pos_end = pos_end.copy()
 
     def matches(self, type_, value):
         return self.type == type_ and self.value == value
@@ -133,7 +147,7 @@ class Lexer:
         tokens = []
 
         while self.curr_char != None:
-            if self.curr_char in [' ', '\t']:
+            if self.curr_char in ' \t':
                 self.advance()
             elif self.curr_char in DIGITS:
                 tokens.append(self.make_number())
@@ -154,15 +168,22 @@ class Lexer:
             elif self.curr_char == '^':
                 tokens.append(Token(TT_POW, pos_start=self.pos))
                 self.advance()
-            elif self.curr_char == '=':
-                tokens.append(Token(TT_EQ, pos_start=self.pos))
-                self.advance()
             elif self.curr_char == '(':
                 tokens.append(Token(TT_LPAREN, pos_start=self.pos))
                 self.advance()
             elif self.curr_char == ')':
                 tokens.append(Token(TT_RPAREN, pos_start=self.pos))
                 self.advance()
+            elif self.curr_char == '!':
+                token, error = self.make_not_equals()
+                if error: return [], error
+                tokens.append(token)
+            elif self.curr_char == '=':
+                tokens.append(self.make_equals())
+            elif self.curr_char == '<':
+                tokens.append(self.make_less_than())
+            elif self.curr_char == '>':
+                tokens.append(self.make_greater_than())
             else:
                 pos_start = self.pos.copy()
                 char = self.curr_char
@@ -179,13 +200,9 @@ class Lexer:
 
         while self.curr_char != None and self.curr_char in DIGITS + '.':
             if self.curr_char == '.':
-                if dot_count == 1:
-                    break
-
+                if dot_count == 1: break
                 dot_count += 1
-                num_str += '.'
-            else:
-                num_str += self.curr_char
+            num_str += self.curr_char
             self.advance()
 
         if dot_count == 0:
@@ -201,9 +218,52 @@ class Lexer:
             id_str += self.curr_char
             self.advance()
 
-        tok_type =  TT_KEYWORD if id_str in KEYWORDS else TT_IDENTIFIER
-
+        tok_type = TT_KEYWORD if id_str in KEYWORDS else TT_IDENTIFIER
         return Token(tok_type, id_str, pos_start, self.pos)
+
+    def make_not_equals(self):
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.curr_char == '=':
+            self.advance()
+            return Token(TT_NE, pos_start=pos_start, pos_end=self.pos), None
+
+        self.advance()
+        return None, ExpectedCharError(pos_start, self.pos, "'=' (after '!')")
+
+    def make_equals(self):
+        tok_type = TT_EQ
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.curr_char == '=':
+            self.advance()
+            tok_type = TT_EE
+
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+
+    def make_less_than(self):
+        tok_type = TT_LT
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.curr_char == '=':
+            self.advance()
+            tok_type = TT_LTE
+
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+
+    def make_greater_than(self):
+        tok_type = TT_GT
+        pos_start = self.pos.copy()
+        self.advance()
+
+        if self.curr_char == '=':
+            self.advance()
+            tok_type = TT_GTE
+
+        return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
 
 
 class NumberNode:
@@ -270,10 +330,7 @@ class ParseResult:
 
     def register(self, res):
         self.advance_count += res.advance_count
-
-        if res.error:
-            self.error = res.error
-
+        if res.error: self.error = res.error
         return res.node
 
     def success(self, node):
@@ -303,7 +360,7 @@ class Parser:
         if not res.error and self.curr_tok.type != TT_EOF:
             return res.failure(InvalidSyntaxError(
                 self.curr_tok.pos_start, self.curr_tok.pos_end,
-                "Expected '+', '-', '*' or '/'"
+                "Expected '+', '-', '*', '/', '^', '==', '!=', '<', '>', <=', '>=', 'AND' or 'OR'"
             ))
         return res
 
@@ -325,9 +382,7 @@ class Parser:
             res.register_advancement()
             self.advance()
             expr = res.register(self.expr())
-
-            if res.error:
-                return res
+            if res.error: return res
             if self.curr_tok.type == TT_RPAREN:
                 res.register_advancement()
                 self.advance()
@@ -340,7 +395,7 @@ class Parser:
 
         return res.failure(InvalidSyntaxError(
             tok.pos_start, tok.pos_end,
-            "Expected int, float, identifier, '+', '-' or '(' "
+            "Expected int, float, identifier, '+', '-', '('"
         ))
 
     def power(self):
@@ -354,16 +409,38 @@ class Parser:
             res.register_advancement()
             self.advance()
             factor = res.register(self.factor())
-
-            if res.error:
-                return res
-
+            if res.error: return res
             return res.success(UnaryOpNode(tok, factor))
 
         return self.power()
 
     def term(self):
         return self.bin_op(self.factor, (TT_MUL, TT_DIV))
+
+    def arith_expr(self):
+        return self.bin_op(self.term, (TT_PLUS, TT_MINUS))
+
+    def comp_expr(self):
+        res = ParseResult()
+
+        if self.curr_tok.matches(TT_KEYWORD, 'NOT'):
+            op_tok = self.curr_tok
+            res.register_advancement()
+            self.advance()
+
+            node = res.register(self.comp_expr())
+            if res.error: return res
+            return res.success(UnaryOpNode(op_tok, node))
+
+        node = res.register(self.bin_op(self.arith_expr, (TT_EE, TT_NE, TT_LT, TT_GT, TT_LTE, TT_GTE)))
+
+        if res.error:
+            return res.failure(InvalidSyntaxError(
+                self.curr_tok.pos_start, self.curr_tok.pos_end,
+                "Expected int, float, identifier, '+', '-', '(' or 'NOT'"
+            ))
+
+        return res.success(node)
 
     def expr(self):
         res = ParseResult()
@@ -391,18 +468,15 @@ class Parser:
             res.register_advancement()
             self.advance()
             expr = res.register(self.expr())
-
-            if res.error:
-                return res
-
+            if res.error: return res
             return res.success(VarAssignNode(var_name, expr))
 
-        node = res.register(self.bin_op(self.term, (TT_PLUS, TT_MINUS)))
+        node = res.register(self.bin_op(self.comp_expr, ((TT_KEYWORD, 'AND'), (TT_KEYWORD, 'OR'))))
 
         if res.error:
             return res.failure(InvalidSyntaxError(
                 self.curr_tok.pos_start, self.curr_tok.pos_end,
-                "Expected 'VAR', int, float, identifier, '+', '-' or '(' "
+                "Expected 'VAR', int, float, identifier, '+', '-', '(' or 'NOT'"
             ))
 
         return res.success(node)
@@ -410,21 +484,17 @@ class Parser:
     def bin_op(self, func_a, ops, func_b=None):
         if func_b == None:
             func_b = func_a
+
         res = ParseResult()
         left = res.register(func_a())
+        if res.error: return res
 
-        if res.error:
-            return res
-
-        while self.curr_tok.type in ops:
+        while self.curr_tok.type in ops or (self.curr_tok.type, self.curr_tok.value) in ops:
             op_tok = self.curr_tok
             res.register_advancement()
             self.advance()
             right = res.register(func_b())
-
-            if res.error:
-                return res
-
+            if res.error: return res
             left = BinOpNode(left, op_tok, right)
 
         return res.success(left)
@@ -479,23 +549,60 @@ class Number:
         if isinstance(other, Number):
             if other.value == 0:
                 return None, RunTimeError(
-                    other.pos_start, other.pos_end, 'Division by zero', self.context
+                    other.pos_start, other.pos_end,
+                    'Division by zero',
+                    self.context
                 )
+
             return Number(self.value / other.value).set_context(self.context), None
 
     def pow_by(self, other):
         if isinstance(other, Number):
             return Number(self.value ** other.value).set_context(self.context), None
 
+    def get_comparison_eq(self, other):
+        if isinstance(other, Number):
+            return Number(int(self.value == other.value)).set_context(self.context), None
+
+    def get_comparison_ne(self, other):
+        if isinstance(other, Number):
+            return Number(int(self.value != other.value)).set_context(self.context), None
+
+    def get_comparison_lt(self, other):
+        if isinstance(other, Number):
+            return Number(int(self.value < other.value)).set_context(self.context), None
+
+    def get_comparison_gt(self, other):
+        if isinstance(other, Number):
+            return Number(int(self.value > other.value)).set_context(self.context), None
+
+    def get_comparison_lte(self, other):
+        if isinstance(other, Number):
+            return Number(int(self.value <= other.value)).set_context(self.context), None
+
+    def get_comparison_gte(self, other):
+        if isinstance(other, Number):
+            return Number(int(self.value >= other.value)).set_context(self.context), None
+
+    def and_by(self, other):
+        if isinstance(other, Number):
+            return Number(int(self.value and other.value)).set_context(self.context), None
+
+    def or_by(self, other):
+        if isinstance(other, Number):
+            return Number(int(self.value or other.value)).set_context(self.context), None
+
+    def notted(self):
+        return Number(1 if self.value == 0 else 0).set_context(self.context), None
+
     def copy(self):
         copy = Number(self.value)
         copy.set_pos(self.pos_start, self.pos_end)
         copy.set_context(self.context)
-
         return copy
 
     def __str__(self):
-        return f'{self.value}'
+        return str(self.value)
 
 
 class Context:
@@ -531,7 +638,7 @@ class Interpreter:
         return method(node, context)
 
     def no_visit_method(self, node, context):
-        raise Exception(f'No visit_{type(node).__name__} method defined!')
+        raise Exception(f'No visit_{type(node).__name__} method defined')
 
     def visit_NumberNode(self, node, context):
         return RTResult().success(
@@ -546,7 +653,7 @@ class Interpreter:
         if not value:
             return res.failure(RunTimeError(
                 node.pos_start, node.pos_end,
-                f"'{var_name}' is not defined!",
+                f"'{var_name}' is not defined",
                 context
             ))
 
@@ -557,12 +664,9 @@ class Interpreter:
         res = RTResult()
         var_name = node.var_name_tok.value
         value = res.register(self.visit(node.value_node, context))
-
-        if res.error:
-            return res
+        if res.error: return res
 
         context.symbol_table.set(var_name, value)
-
         return res.success(value)
 
     def visit_BinOpNode(self, node, context):
@@ -582,42 +686,60 @@ class Interpreter:
             result, error = left.div_by(right)
         elif node.op_tok.type == TT_POW:
             result, error = left.pow_by(right)
+        elif node.op_tok.type == TT_EE:
+            result, error = left.get_comparison_eq(right)
+        elif node.op_tok.type == TT_NE:
+            result, error = left.get_comparison_ne(right)
+        elif node.op_tok.type == TT_LT:
+            result, error = left.get_comparison_lt(right)
+        elif node.op_tok.type == TT_GT:
+            result, error = left.get_comparison_gt(right)
+        elif node.op_tok.type == TT_LTE:
+            result, error = left.get_comparison_lte(right)
+        elif node.op_tok.type == TT_GTE:
+            result, error = left.get_comparison_gte(right)
+        elif node.op_tok.matches(TT_KEYWORD, 'AND'):
+            result, error = left.and_by(right)
+        elif node.op_tok.matches(TT_KEYWORD, 'OR'):
+            result, error = left.or_by(right)
 
         if error:
             return res.failure(error)
         else:
             return res.success(result.set_pos(node.pos_start, node.pos_end))
 
-
     def visit_UnaryOpNode(self, node, context):
         res = RTResult()
         number = res.register(self.visit(node.node, context))
         if res.error: return res
 
+        error = None
+
         if node.op_tok.type == TT_MINUS:
-            number, error = number.mult_by(Number(-1))
+            number, error = number.multed_by(Number(-1))
+        elif node.op_tok.matches(TT_KEYWORD, 'NOT'):
+            number, error = number.notted()
 
         if error:
             return res.failure(error)
-
-        return res.success(number.set_pos(node.pos_start, node.pos_end))
+        else:
+            return res.success(number.set_pos(node.pos_start, node.pos_end))
 
 
 global_symbol_table = SymbolTable()
-global_symbol_table.set('null', Number(0))
+global_symbol_table.set("NULL", Number(0))
+global_symbol_table.set("FALSE", Number(0))
+global_symbol_table.set("TRUE", Number(1))
+
 
 def run(fn, text):
     lexer = Lexer(fn, text)
     tokens, error = lexer.make_token()
-
-    if error:
-        return None, error
+    if error: return None, error
 
     parser = Parser(tokens)
     ast = parser.parse()
-
-    if ast.error:
-        return None, ast.error
+    if ast.error: return None, ast.error
 
     interpreter = Interpreter()
     context = Context('<program>')

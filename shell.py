@@ -8,4 +8,4 @@ while True:
     if error:
         print(error)
     elif result:
-        print(result)
+        print(str(result))

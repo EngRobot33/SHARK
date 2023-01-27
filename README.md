@@ -4,9 +4,9 @@
 
 * **This project is for "Principles of Compiler Design" course.**
 
-* **You can refer to [this file](https://github.com/EngRobot33/SHARK/blob/master/grammar.txt) to learn about the grammar of the language.**
+* **To learn about the grammar of this language, click [here](https://github.com/EngRobot33/SHARK/blob/master/grammar.txt).**
 
-* ***The documentation will release in the foreseeable future. Thanks for your patience.***
+* **And [here](https://github.com/EngRobot33/SHARK/blob/master/documentation.pdf) is the documentation.**
 
 ## Installation
 
